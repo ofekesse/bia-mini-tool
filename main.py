@@ -84,8 +84,12 @@ def get_ai_analysis(sorted_data):
 
     Please provide your analysis structured in two main parts:
 
-    PART 1: RECOVERY PRIORITY ASSESSMENT
-    Explicitly "Suggest a recovery priority" for these processes. Do you agree with the sorting order my engine provided? If yes, explain why the engine's logic (Status -> RTO -> MAO -> RPO -> Time-Critical) makes business sense. If you disagree, suggest your own recovery priority order and justify it.
+    PART 1: RECOVERY PRIORITY ASSESSMENT & DEVIL'S ADVOCATE
+    My internal prioritization engine sorted these processes mathematically based on: Status -> RTO -> MAO -> RPO -> Time-Critical. 
+    However, I need you to act as a critical "Devil's Advocate". Do NOT just agree with the math. 
+    Based on your industry experience in Ad-Tech:
+    1. Are any of these systems misclassified in their initial 'Process Status' or 'RTO'? (e.g., Should a system labeled 'Important' actually be 'Critical'?).
+    2. If you were the CISO, would you manually override my engine's final sorting order? If yes, explicitly state your proposed order (1 to 4) and justify the business reasons for the override.
 
     PART 2: PROCESS ANALYSIS & CONTROLS
     For each process in the list, please provide:
@@ -96,7 +100,7 @@ def get_ai_analysis(sorted_data):
     Format the output clearly with headings.
     """
 
-    print("\nConsultin with AI Expert... Please wait.\n")
+    print("\nConsulting with AI Expert... Please wait.\n")
     response = client.models.generate_content(
         model='gemini-2.5-flash',
         contents=prompt,
