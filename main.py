@@ -1,8 +1,14 @@
 import pandas as pd
 import re
+import os
 import glob
 import sys
+from google import genai
+from dotenv import load_dotenv
 
+load_dotenv()
+
+EXCEL_FILE_PATTERN = "*.xlsx"
 HEADER_ROW_INDEX = 3
 
 def extract_hours_to_numeric(text):
@@ -11,8 +17,7 @@ def extract_hours_to_numeric(text):
     Example: "24 Hours" -> 24.0, "1 Month" -> 720.0, "5 Minutes" -> 0.08
     """
     text = str(text).lower().strip()
-    if text == 'nan' or text == 'none' or text == '':
-        return 9999.0 # Default high penalty for missing data
+    if text in ['nan', 'none', '']: return 9999.0 # Default high penalty for missing data
 
     # Handle minutes
     if 'minute' in text:
@@ -43,13 +48,13 @@ def choose_excel_file():
     Scans the current directory for Excel files and lets the user choose one.
     """
     # Find all Excel files in the folder
-    files = glob.glob("*.xlsx")
+    files = glob.glob(EXCEL_FILE_PATTERN)
 
     if not files:
-        print("No Excel files found in the current directory.")
+        print("No Excel files found in the current directory!")
         sys.exit(1)
     
-    print("Available BIA Excel files:")
+    print("Available BIA files:")
     for i, file in enumerate(files, start=1):
         print(f"[{i}] {file}")
 
@@ -66,6 +71,40 @@ def choose_excel_file():
         except ValueError:
             print("Invalid input. Please enter a number.")
 
+def get_ai_analysis(sorted_data):
+    """Sends the analyzed table to Gemini for GRC insights"""
+    client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+    
+    # Buildind a structed prompt
+    prompt = f"""
+    As a Senior GRC Expert, review the following BIA (Business Impact Analysis) data from Teads. 
+    My internal prioritization engine has sorted these processes in the following recovery order (from first to recover to last):
+    
+    Data: {sorted_data.to_dict(orient='records')}
+
+    Please provide your analysis structured in two main parts:
+
+    PART 1: RECOVERY PRIORITY ASSESSMENT
+    Explicitly "Suggest a recovery priority" for these processes. Do you agree with the sorting order my engine provided? If yes, explain why the engine's logic (Status -> RTO -> MAO -> RPO -> Time-Critical) makes business sense. If you disagree, suggest your own recovery priority order and justify it.
+
+    PART 2: PROCESS ANALYSIS & CONTROLS
+    For each process in the list, please provide:
+    1. A short summary of the business impact if it fails.
+    2. One specific security CONTROL (Preventive, Detective, or Corrective) that could mitigate the risk.
+    3. A detailed explanation of why this control is effective for this specific process, considering its RTO, MAO, RPO, and Time-Critical status.
+
+    Format the output clearly with headings.
+    """
+
+    print("\nConsultin with AI Expert... Please wait.\n")
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=prompt,
+    )
+
+    return response.text
+
+
 def main():
     print("Loading BIA Data & Starting Prioritization Engine...\n")
     
@@ -73,27 +112,20 @@ def main():
     EXCEL_FILE = choose_excel_file()
 
     try:
-        # 1. Load Data
         df = pd.read_excel(EXCEL_FILE, header=HEADER_ROW_INDEX)
         df = df.dropna(subset=['Process'])
         
-        # 2. Create Numeric Weights for Status
-        # Critical gets the highest weight so it's sorted to the top
+        # Normalization & Scoring
         status_weights = {'Critical': 3, 'Important': 2, 'Supportive': 1}
         df['Status_Score'] = df['Process Status'].map(status_weights)
-        
-        # 3. Create Boolean Flag for Time-Critical constraints
-        # If the cell is empty or says 'None', it's 0. Otherwise, it gets a 1 boost.
-        df['Time_Flag'] = df['Time-Critical'].apply(
-            lambda x: 0 if pd.isna(x) or str(x).strip().lower() == 'none' else 1
-        )
-        
-        # 4. Normalize RTO, MAO and RPO to pure numbers
         df['RTO_Numeric'] = df['Process RTO'].apply(extract_hours_to_numeric)
         df['MAO_Numeric'] = df['Process MAO'].apply(extract_hours_to_numeric)
         df['RPO_Numeric'] = df['Process RPO'].apply(extract_hours_to_numeric)
+        df['Time_Flag'] = df['Time-Critical'].apply(
+            lambda x: 0 if pd.isna(x) or str(x).strip().lower() == 'none' else 1
+        )
 
-        # 5. THE SORTING ENGINE (Tie-breaker Logic)
+        # THE SORTING ENGINE (Tie-breaker Logic)
         # Priority 1: Status_Score (Descending - Critical first)
         # Priority 2: RTO_Numeric (Ascending - Shortest recovery time first)
         # Priority 3: MAO_Numeric (Ascending - Shortest max outage first)
@@ -109,13 +141,18 @@ def main():
         # pd.set_option('display.width', 1000)
 
         # Select columns to display to the user
-        display_cols = ['Process', 'Process Status', 'Time-Critical', 'Process RTO', 'Process MAO', 'Process RPO']
-        
-        print("Final Recovery Prioritization List (Top to Bottom):")
-        print("=" * 110)
+        display_cols = ['Process', 'Process Status', 'Process RTO', 'Process MAO', 'Process RPO', 'Time-Critical']
+        print("\n" + "="*50)
+        print("INTERNAL ENGINE ANALYSIS RESULTS:")
+        print("\n" + "="*50)
         print(df_sorted[display_cols].reset_index(drop=True))
-        print("=" * 110)
-        print("\nLogic applied: Status -> Shortest RTO -> Shortest MAO -> Shortest RPO -> Time-Critical Flag")
+        
+        # AI Integration
+        ai_insights = get_ai_analysis(df_sorted[display_cols])
+        print("\n" + "="*50)
+        print("AI-Generated GRC Insights:")
+        print("\n" + "="*50)
+        print(ai_insights)
 
     except Exception as e:
         print(f"Error running the engine: {e}")
