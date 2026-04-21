@@ -2,8 +2,7 @@
 
 Goal: Simple tool that processes BIA data and provides basic prioritization
 
-My Approach:
-Prioritization Logic & Algorithm
+My Approach - Prioritization Logic & Algorithm:
 The prioritization engine calculates the recovery order to minimize financial, reputational, and operational damage. The baseline Priority (High/Medium/Low) is primarily driven by the Process Status.
 To handle edge cases where multiple systems share the same Priority level, the script applies a sequential tie-breaking algorithm:
 
