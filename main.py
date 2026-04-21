@@ -1,7 +1,8 @@
 import pandas as pd
 import re
+import glob
+import sys
 
-EXCEL_FILE = "BIA_-_2026_-_combined_-_tests.xlsx"
 HEADER_ROW_INDEX = 3
 
 def extract_hours_to_numeric(text):
@@ -37,9 +38,40 @@ def extract_hours_to_numeric(text):
 
     return val
 
+def choose_excel_file():
+    """
+    Scans the current directory for Excel files and lets the user choose one.
+    """
+    # Find all Excel files in the folder
+    files = glob.glob("*.xlsx")
+
+    if not files:
+        print("No Excel files found in the current directory.")
+        sys.exit(1)
+    
+    print("Available BIA Excel files:")
+    for i, file in enumerate(files, start=1):
+        print(f"[{i}] {file}")
+
+    # Keep asking until the user makes a valid choice
+    while True:
+        try:
+            choice = int(input("Enter the number of the file you want to use: "))
+            if 1 <= choice <= len(files):
+                selected_file = files[choice - 1]
+                print(f"You selected: {selected_file}\n")
+                return selected_file
+            else:
+                print("Invalid choice. Please select a valid file number.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
 def main():
     print("Loading BIA Data & Starting Prioritization Engine...\n")
     
+    # 0. Let user choose the Excel file
+    EXCEL_FILE = choose_excel_file()
+
     try:
         # 1. Load Data
         df = pd.read_excel(EXCEL_FILE, header=HEADER_ROW_INDEX)
@@ -80,10 +112,10 @@ def main():
         display_cols = ['Process', 'Process Status', 'Time-Critical', 'Process RTO', 'Process MAO', 'Process RPO']
         
         print("Final Recovery Prioritization List (Top to Bottom):")
-        print("=" * 100)
+        print("=" * 110)
         print(df_sorted[display_cols].reset_index(drop=True))
-        print("=" * 100)
-        print("\nLogic applied: Status -> Time-Critical Boost -> Shortest RTO -> Shortest MAO")
+        print("=" * 110)
+        print("\nLogic applied: Status -> Shortest RTO -> Shortest MAO -> Shortest RPO -> Time-Critical Flag")
 
     except Exception as e:
         print(f"Error running the engine: {e}")
